@@ -1,35 +1,33 @@
 import socket
 import time
 
-# Constants
-PACKET_SIZE = 1024
-SEQ_ID_SIZE = 4
-MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
-MSS = MESSAGE_SIZE  # Maximum Segment Size
-INITIAL_SSTHRESH = 64  # Initial Slow Start Threshold
 
-# Global lists
-packet_delays = []
+# total packet size
+PACKET_SIZE = 1024  
+# bytes reserved for sequence id
+SEQ_ID_SIZE = 4     
+# bytes available for message
+MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE 
+
+
+# global lists
+packet_delays = []  # total per-pkt delays
 jitters = []
-send_times = {}
+send_times = {}  # store send_times (initial start) for each packet
 
 def get_jitter():
-    """Calculate jitters based on packet delays."""
+    """calculate jitters based on packet delays."""
     for i in range(len(packet_delays) - 1):
         jitter = abs(packet_delays[i + 1] - packet_delays[i])
         jitters.append(jitter)
 
 def print_metrics(total_bytes, start_time, end_time):
-    """Print throughput, average packet delay, and average jitter metrics."""
-    duration = end_time - start_time
-
-    throughput = (total_bytes) / duration  # bits per second
+    """print throughput, average packet delay, and average jitter metrics."""
+    throughput = (total_bytes) / (end_time - start_time)  # bits per second
     avg_jitter = sum(jitters) / len(jitters) if jitters else 0
     avg_delay = sum(packet_delays) / len(packet_delays) if packet_delays else 0
 
-    metric = 0
-    if avg_jitter > 0 and avg_delay > 0:
-        metric = 0.2 * (throughput / 2000) + (0.1 / avg_jitter) + (0.8 / avg_delay)
+    metric = 0.2 * (throughput / 2000) + 0.1 / avg_jitter + 0.8 / avg_delay
 
     print(f"Throughput (bps): {round(throughput, 7)}")
     print(f"Avg Packet Delay (s): {round(avg_delay, 7)}")
@@ -37,79 +35,104 @@ def print_metrics(total_bytes, start_time, end_time):
     print(f"Metric: {round(metric, 7)}")
 
 def main():
-    # Read data
+    """main function"""
+
+    # read data 
     with open('file.mp3', 'rb') as f:
         data = f.read()
 
-    total_bytes = 0  # Track total data sent
+    total_bytes = 0  # total data sent
 
-    # Create a UDP socket
+    # create a udp socket
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
-        udp_socket.bind(("localhost", 5000))
-        udp_socket.settimeout(1)
 
-        # Timing for throughput
-        start_time = time.time()
+        # bind the socket to a OS port
+        udp_socket.bind(("localhost", 5000))  
+        udp_socket.settimeout(1)  
 
-        # TCP Tahoe variables
-        cwnd = 1  # Congestion window
-        ssthresh = INITIAL_SSTHRESH
-        base_id = 0  # First unacknowledged sequence ID
-        seq_id_tmp = 0  # Next sequence ID to send
+        # start time for throughput
+        start_time = time.time()  
+        # tcp reno moving the variables 
+        window_size = 1  
+        ssthresh = 64
 
-        acks = {}
+        # sliding window variables
+        base_id = 0  # first unacked pkt in frame
+        seq_id_tmp = 0  # tmp variable as we iterate over window
+        acks = {}  # saving acks (we do not delete)
+        dup_acks = 0  # dup acks 
 
         while base_id < len(data):
-            # Send packets within the congestion window
-            while seq_id_tmp < base_id + cwnd and seq_id_tmp < len(data):
+            # construct messages
+            # fill the window to 100
+            while seq_id_tmp < base_id + window_size and seq_id_tmp < len(data):
+                # prepare the packet
                 message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big') + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
                 udp_socket.sendto(message, ('localhost', 5001))
 
                 if seq_id_tmp not in send_times:
-                    send_times[seq_id_tmp] = time.time()
+                    send_times[seq_id_tmp] = time.time() # store start send
 
                 total_bytes += len(message)
                 acks[seq_id_tmp] = False
-                seq_id_tmp += MSS
 
+                # move seq_id tmp pointer ahead
+                seq_id_tmp += MESSAGE_SIZE
+
+            # wait for acknowledgment
             try:
-                # Wait for acknowledgment
+                # wait for ack
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
+
+                # extract ack id
                 ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
 
                 print(f"Received ACK for Sequence ID: {ack_id}")
 
+                # pkt delay for current ack pkt 
                 if ack_id in send_times:
                     packet_delay = time.time() - send_times[ack_id]
                     packet_delays.append(packet_delay)
 
                 if ack_id >= base_id:
+                    # if we haven't already acked pkt
                     acks[ack_id] = True
-                    base_id = ack_id + MSS  # Move base ID up after receiving valid ACK
+                    base_id = ack_id + MESSAGE_SIZE
+                    dup_acks = 0  # dup ack set to 0 again
 
-                # Adjust congestion window
-                if cwnd < ssthresh:
-                    # Slow Start
-                    cwnd = cwnd**2
+                # congestion window 
+                if window_size < ssthresh:
+                    window_size = window_size**2 # slow start 
                 else:
-                    # Congestion Avoidance
-                    cwnd += 1
+                    window_size += 1 #congestion avoidance
 
             except socket.timeout:
-                # Timeout occurred: Enter slow start
-                print(f"Timeout! Resetting cwnd and ssthresh to 1.")
-                cwnd = 1  # Reset congestion window to 1 (TCP Tahoe behavior)
-                ssthresh = max(cwnd // 2, 1)
+                # enter congestion avoidance and no ack -> set base to the pkt that was lost
+                print(f"Timeout! Resetting window_size and ssthresh.")
+                ssthresh = max(window_size // 2, 1)
+                window_size = ssthresh
                 seq_id_tmp = base_id
 
-                # Retransmit all packets in the current window
-                for seq_id in range(base_id, base_id + cwnd, MSS):
+                # pkt retransmission
+                for seq_id in range(base_id, base_id + window_size, MESSAGE_SIZE):
                     if seq_id < len(data):
                         message = int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder='big') + data[seq_id: seq_id + MESSAGE_SIZE]
                         udp_socket.sendto(message, ('localhost', 5001))
                         send_times[seq_id] = time.time()
 
-        # Send closing message
+            # handle dup ack (fast retransmission - never enters due to simulator)
+            if ack_id == base_id:
+                dup_acks += 1
+                if dup_acks == 3:
+                    print("Fast Retransmit Triggered")
+                    ssthresh = max(window_size // 2, 1)
+                    window_size = ssthresh  # sst                
+                    #retransmit
+                    message = int.to_bytes(base_id, SEQ_ID_SIZE, byteorder='big') + data[base_id: base_id + MESSAGE_SIZE]
+                    udp_socket.sendto(message, ('localhost', 5001))
+                    send_times[base_id] = time.time()
+
+        # send final closing message
         udp_socket.sendto(int.to_bytes(-1, SEQ_ID_SIZE, byteorder='big', signed=True), ('localhost', 5001))
 
         end_time = time.time()
