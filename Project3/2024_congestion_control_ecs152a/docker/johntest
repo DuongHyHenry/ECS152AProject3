@@ -1,34 +1,35 @@
 import socket
 import time
 
-# Total packet size
-PACKET_SIZE = 1024  
-# Bytes reserved for sequence id
-SEQ_ID_SIZE = 4     
-# Bytes available for message
-MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE 
-# Initial window size and threshold for congestion control
-WINDOW_SIZE = 1
-THRESHOLD = 64
+# Constants
+PACKET_SIZE = 1024
+SEQ_ID_SIZE = 4
+MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
+MSS = MESSAGE_SIZE  # Maximum Segment Size
+INITIAL_SSTHRESH = 64  # Initial Slow Start Threshold
 
-# Global lists for tracking packet delays and jitter
-packet_delays = []  
+# Global lists
+packet_delays = []
 jitters = []
-send_times = {}  # Dictionary to store send times for each packet
+send_times = {}
 
 def get_jitter():
-    """calculate jitters based on packet delays."""
+    """Calculate jitters based on packet delays."""
     for i in range(len(packet_delays) - 1):
         jitter = abs(packet_delays[i + 1] - packet_delays[i])
         jitters.append(jitter)
 
 def print_metrics(total_bytes, start_time, end_time):
-    """print throughput, avg packet delay, avg jitter, and metrics."""
-    throughput = (total_bytes) / (end_time - start_time)  # bytes per second
+    """Print throughput, average packet delay, and average jitter metrics."""
+    duration = end_time - start_time
+
+    throughput = (total_bytes) / duration  # bits per second
     avg_jitter = sum(jitters) / len(jitters) if jitters else 0
     avg_delay = sum(packet_delays) / len(packet_delays) if packet_delays else 0
 
-    metric = 0.2 * (throughput / 2000) + (0.1 / avg_jitter) + (0.8 / avg_delay)
+    metric = 0
+    if avg_jitter > 0 and avg_delay > 0:
+        metric = 0.2 * (throughput / 2000) + (0.1 / avg_jitter) + (0.8 / avg_delay)
 
     print(f"Throughput (bps): {round(throughput, 7)}")
     print(f"Avg Packet Delay (s): {round(avg_delay, 7)}")
@@ -44,109 +45,74 @@ def main():
 
     # Create a UDP socket
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
-
-        # Bind the socket to a local port
-        udp_socket.bind(("localhost", 5000))  
-        udp_socket.settimeout(1)  # Timeout set to 1 second
+        udp_socket.bind(("localhost", 5000))
+        udp_socket.settimeout(1)
 
         # Timing for throughput
-        start_time = time.time()  
+        start_time = time.time()
 
-        # Sliding window variables
+        # TCP Tahoe variables
+        cwnd = 1  # Congestion window
+        ssthresh = INITIAL_SSTHRESH
         base_id = 0  # First unacknowledged sequence ID
         seq_id_tmp = 0  # Next sequence ID to send
-        acks = {}  # Acknowledgments for each packet
-        acked = []
-        initial = 1
 
-        # Congestion control state
-        cwnd = 1  # Congestion window size (starts at 1)
-        ssthresh = THRESHOLD  # Slow start threshold
-        flag = 0 
+        acks = {}
 
         while base_id < len(data):
-            # Fill the window with packets up to the current window size (cwnd)
-            while seq_id_tmp < base_id + cwnd * MESSAGE_SIZE and seq_id_tmp < len(data):
-                # Prepare the packet
-                message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
+            # Send packets within the congestion window
+            while seq_id_tmp < base_id + cwnd and seq_id_tmp < len(data):
+                message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big') + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
                 udp_socket.sendto(message, ('localhost', 5001))
 
-                if seq_id_tmp + MESSAGE_SIZE not in send_times: 
-                    send_times[seq_id_tmp + MESSAGE_SIZE] = time.time()  # Store the send time for this packet
-                total_bytes += len(message)  # Track bytes sent
-                print(f"{seq_id_tmp} total_bytes: {total_bytes}")
-                acks[seq_id_tmp + MESSAGE_SIZE] = False
-                
-                seq_id_tmp += MESSAGE_SIZE
+                if seq_id_tmp not in send_times:
+                    send_times[seq_id_tmp] = time.time()
 
-            # Wait for acknowledgment of the packets in the window
+                total_bytes += len(message)
+                acks[seq_id_tmp] = False
+                seq_id_tmp += MSS
+
             try:
-                while True:
-                    ack, _ = udp_socket.recvfrom(PACKET_SIZE)
-                    ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
+                # Wait for acknowledgment
+                ack, _ = udp_socket.recvfrom(PACKET_SIZE)
+                ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
 
-                    # Calculate delay for the acknowledged packet
-                    if ack_id in send_times:
-                        end_send = time.time()  # Timestamp when the acknowledgment is received
-                        packet_delay = end_send - send_times[ack_id]
-                        packet_delays.append(packet_delay)  # Store the delay
+                print(f"Received ACK for Sequence ID: {ack_id}")
 
-                    if ack_id >= base_id:
-                        if ack_id in acks and not acks[ack_id]:
-                            acks[ack_id] = True
-                            base_id = ack_id + MESSAGE_SIZE  # Move base_id to the first unacknowledged packet
-                            flag = 1
-                    break
+                if ack_id in send_times:
+                    packet_delay = time.time() - send_times[ack_id]
+                    packet_delays.append(packet_delay)
 
+                if ack_id >= base_id:
+                    acks[ack_id] = True
+                    base_id = ack_id + MSS  # Move base ID up after receiving valid ACK
 
-                if flag == 1:
-                    if cwnd < ssthresh:  # Slow start phase
-                        cwnd *= 2  # Exponentially increase the window size
-                        print("slow start")
-                    else:  # Congestion avoidance phase
-                        cwnd += 1  # Linearly increase the window size
-                        print("congestion avoidance")      
-                    flag = 0              
-
-                        # break
-                if timeout_flag == 0:
-                    ssthresh = max(cwnd // 2, 2)  # Reduce the threshold to half of the current cwnd
-                    cwnd = 1  # Reset the window size to 1 (slow start)
-                    timeout_flag = 0
-            
-
-                # # Congestion control logic
-                # if cwnd < ssthresh:  # Slow start phase
-                #     cwnd *= 2  # Exponentially increase the window size
-                #     print("slow starrt")
-                # else:  # Congestion avoidance phase
-                #     cwnd += 1  # Linearly increase the window size
-                #     print("congestion avoidance")
+                # Adjust congestion window
+                if cwnd < ssthresh:
+                    # Slow Start
+                    cwnd = cwnd**2
+                else:
+                    # Congestion Avoidance
+                    cwnd += 1
 
             except socket.timeout:
-                # Timeout handling (simulating TCP Tahoe's reaction to packet loss)
-                print(f"Timeout occurred, reducing cwnd and retransmitting.")
-                timeout_flag = 1 
-                seq_id_tmp = base_id  # Start from the first unacknowledged packet
-                # Retransmit all unacknowledged packets
-                for seq_id in range(base_id, seq_id_tmp, MESSAGE_SIZE):
-                    if not acks.get(seq_id, False):
-                        message = int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id: seq_id + MESSAGE_SIZE]
-                        udp_socket.sendto(message, ('localhost', 5001))
-                        print(f"Retransmitting packet with Sequence ID: {seq_id}")
-                continue
+                # Timeout occurred: Enter slow start
+                print(f"Timeout! Resetting cwnd and ssthresh to 1.")
+                cwnd = 1  # Reset congestion window to 1 (TCP Tahoe behavior)
+                ssthresh = max(cwnd // 2, 1)
+                seq_id_tmp = base_id
 
-                # # Retransmit only unacknowledged packets
-                # for seq_id in range(base_id, seq_id_tmp, MESSAGE_SIZE):
-                #     if not acks.get(seq_id, False):
-                #         message = int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id: seq_id + MESSAGE_SIZE]
-                #         udp_socket.sendto(message, ('localhost', 5001))
-                #         print(f"Retransmitting packet with Sequence ID: {seq_id}")
+                # Retransmit all packets in the current window
+                for seq_id in range(base_id, base_id + cwnd, MSS):
+                    if seq_id < len(data):
+                        message = int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder='big') + data[seq_id: seq_id + MESSAGE_SIZE]
+                        udp_socket.sendto(message, ('localhost', 5001))
+                        send_times[seq_id] = time.time()
 
         # Send closing message
         udp_socket.sendto(int.to_bytes(-1, SEQ_ID_SIZE, byteorder='big', signed=True), ('localhost', 5001))
 
-        end_time = time.time()  # End timing for throughput
+        end_time = time.time()
 
     # Calculate and print metrics
     get_jitter()
