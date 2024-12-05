@@ -47,7 +47,6 @@ def main():
                 message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
                 # messages.append((seq_id_tmp, message))                
                 udp_socket.sendto(message, ('localhost', 5001))
-                print(seq_id_tmp)
 
                 if seq_id_tmp not in send_times: 
                     send_times[seq_id_tmp] = time.time()  # Store the send time for this packet
@@ -61,7 +60,6 @@ def main():
                 while True:
                     ack, _ = udp_socket.recvfrom(PACKET_SIZE)
                     ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
-                    print(ack_id, ack[SEQ_ID_SIZE:], base_id)
                     # Calculate delay for the acknowledged packet
                     if ack_id in send_times:
                         end_send = time.time()  # Timestamp when the acknowledgment is received
@@ -69,14 +67,11 @@ def main():
                         packet_delays.append(packet_delay)  # Store the delay
 
                     if ack_id >= base_id:
-                        # print("entered")
                         if ack_id in acks and not acks[ack_id]:
                             acks[ack_id] = True
                             base_id = ack_id + MESSAGE_SIZE
 
             except socket.timeout:
-                #print("timeout")
-                print(f"changing seq_id_tmp({seq_id_tmp}) -> base_id ({base_id}) ")
                 seq_id_tmp = base_id
                 continue
 
