@@ -54,7 +54,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                 ack, _ = udp_socket.recvfrom(PACKET_SIZE)
                 ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
                 print(ack_id, ack[SEQ_ID_SIZE:])  # Preserve the print statement for each acknowledgment
-                acks[ack_id] = True
+
+                # Mark all sequence IDs up to the ack_id as acknowledged
+                for sid in list(acks.keys()):
+                    if sid <= ack_id:
+                        acks[sid] = True
 
                 # Measure delay for this packet
                 if ack_id in send_times:
@@ -102,3 +106,4 @@ print(f"Throughput: {throughput:.7f} bytes/second")
 print(f"Average Packet Delay: {average_delay:.7f} seconds")
 print(f"Average Jitter: {average_jitter:.7f} seconds")
 print(f"Performance Metric: {performance_metric:.7f}")
+
