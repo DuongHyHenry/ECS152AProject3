@@ -64,7 +64,10 @@ with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
                     jitter_values.append(jitter)
         except socket.timeout:
             # Resend unacknowledged packets in the current window
-            pass
+            for sid, message in messages:
+                    if not acks[sid]:
+                        udp_socket.sendto(message, ('localhost', 5001))
+                        send_times[sid] = time.time()  # Update resend time
 
         # Slide the window forward
         while window_start < total_packets and acks[window_start]:
