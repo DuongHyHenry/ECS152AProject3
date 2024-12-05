@@ -20,8 +20,8 @@ def get_jitter():
 def print_metrics(total_data_sent, start_time, end_time):
     """Print throughput, average packet delay, and average jitter metrics."""
     throughput = (total_data_sent) / (end_time - start_time)  # bytes per second
-    avg_jitter = sum(jitters) / len(jitters)
-    avg_delay = sum(packet_delays) / len(packet_delays)
+    avg_jitter = sum(jitters) / len(jitters) if jitters else 0
+    avg_delay = sum(packet_delays) / len(packet_delays) if packet_delays else 0
 
     metric = 0.2 * (throughput / 2000) + 0.1 / avg_jitter + 0.8 / avg_delay
 
@@ -46,6 +46,7 @@ def main():
 
         # Initialize sequence ID
         seq_id = 0
+        acks = {}  # Dictionary to track acknowledged sequence IDs
         while seq_id < len(data):
             # Prepare the packet
             message = int.to_bytes(seq_id, SEQ_ID_SIZE, byteorder='big', signed=True) + \
@@ -65,6 +66,11 @@ def main():
                     # Extract ACK ID
                     ack_id = int.from_bytes(ack[:SEQ_ID_SIZE], byteorder='big')
                     print(f"Received ACK for Sequence ID: {ack_id}")
+
+                    # Mark all sequence IDs up to ack_id as acknowledged
+                    for sid in list(acks.keys()):
+                        if sid <= ack_id:
+                            acks[sid] = True
 
                     if ack_id == seq_id:  # Valid acknowledgment received
                         break
@@ -87,3 +93,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
