@@ -28,7 +28,7 @@ def main():
     
         # Bind the socket to an OS port
         udp_socket.bind(("0.0.0.0", 5002))
-        udp_socket.settimeout(1)
+        udp_socket.settimeout(2)
     
         # Start sending data from the 0th sequence
         seq_id = 0
