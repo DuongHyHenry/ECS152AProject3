@@ -10,6 +10,12 @@ MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
 # total packets to send
 WINDOW_SIZE = 100
 
+# Metrics tracking
+packet_delays = []  # List of per-packet delays
+jitter_values = []  # List of jitter values (difference between successive delays)
+total_bytes_sent = 0  # Total bytes successfully sent and acknowledged
+start_time = None  # Start time for throughput calculation
+
 # read data
 with open('file.mp3', 'rb') as f:
     data = f.read()
