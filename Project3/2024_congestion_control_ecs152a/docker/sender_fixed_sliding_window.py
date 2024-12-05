@@ -10,12 +10,13 @@ MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
 # total packets to send
 WINDOW_SIZE = 100
 
-# global variable lists
-packet_delays = []  # total per-packet delays
-jitters = []
-send_times = {}  # Dictionary to store send times for each packet
-
 def main():
+    
+    #lists
+    packet_delays = []  # total per-packet delays
+    jitters = []
+    send_times = {}  # Dictionary to store send times for each packet
+    
     # Read data
     with open('file.mp3', 'rb') as f:
         data = f.read()
