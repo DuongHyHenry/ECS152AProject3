@@ -22,7 +22,7 @@ with open('file.mp3', 'rb') as f:
 with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
 
     # Bind the socket to an OS port
-    udp_socket.bind(("0.0.0.0", 5000))
+    udp_socket.bind(("0.0.0.0", 5002))
     udp_socket.settimeout(1)
 
     # Start sending data from the 0th sequence
