@@ -85,8 +85,8 @@ def main():
                         send_times = time.time()  # Update resend time
     
             # Update the sequence ID and total bytes sent
-            seq_id += MESSAGE_SIZE * WINDOW_SIZE
-            total_bytes_sent += MESSAGE_SIZE * WINDOW_SIZE
+            seq_id += MESSAGE_SIZE
+            total_bytes_sent += MESSAGE_SIZE
     
         # Send final closing message
         udp_socket.sendto(int.to_bytes(-1, 4, signed=True, byteorder='big'), ('localhost', 5001))
