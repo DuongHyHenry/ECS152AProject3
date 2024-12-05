@@ -1,8 +1,6 @@
 import socket
 import time
 
-#phuong
-
 # total packet size
 PACKET_SIZE = 1024  
 # bytes reserved for sequence id
@@ -12,29 +10,10 @@ MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
 # total packets to send
 WINDOW_SIZE = 100
 
-# global lists
+# global variable lists
 packet_delays = []  # total per-packet delays
 jitters = []
 send_times = {}  # Dictionary to store send times for each packet
-
-def get_jitter():
-    """calculate jitters based on packet delays."""
-    for i in range(len(packet_delays) - 1):
-        jitter = abs(packet_delays[i + 1] - packet_delays[i])
-        jitters.append(jitter)
-
-def print_metrics(total_bytes, start_time, end_time):
-    """print throughput, average packet delay, and average jitter metrics."""
-    throughput = (total_bytes) / (end_time - start_time)  # bits per second
-    avg_jitter = sum(jitters) / len(jitters) if jitters else 0
-    avg_delay = sum(packet_delays) / len(packet_delays) if packet_delays else 0
-
-    metric = 0.2 * (throughput / 2000) + (0.1 / avg_jitter) + (0.8 / avg_delay)
-
-    print(f"Throughput (bps): {round(throughput, 7)}")
-    print(f"Avg Packet Delay (s): {round(avg_delay, 7)}")
-    print(f"Avg Jitter (s): {round(avg_jitter, 7)}")
-    print(f"Metric: {round(metric, 7)}")
 
 def main():
     # Read data
@@ -105,9 +84,22 @@ def main():
 
         end_time = time.time()  # End timing for throughput
 
-    # Calculate and print metrics
-    get_jitter()
-    print_metrics(total_bytes, start_time, end_time)
+    #calculate jitters
+    for i in range(len(packet_delays) - 1):
+        jitter = abs(packet_delays[i + 1] - packet_delays[i])
+        jitters.append(jitter)
+        
+    #calculate metrics
+    throughput = (total_bytes) / (end_time - start_time)  # bits per second
+    avg_jitter = sum(jitters) / len(jitters) if jitters else 0
+    avg_delay = sum(packet_delays) / len(packet_delays) if packet_delays else 0
+
+    metric = 0.2 * (throughput / 2000) + (0.1 / avg_jitter) + (0.8 / avg_delay)
+
+    print(f"Throughput (bps): {round(throughput, 7)}")
+    print(f"Avg Packet Delay (s): {round(avg_delay, 7)}")
+    print(f"Avg Jitter (s): {round(avg_jitter, 7)}")
+    print(f"Metric: {round(metric, 7)}")
 
 if __name__ == "__main__":
     main()
