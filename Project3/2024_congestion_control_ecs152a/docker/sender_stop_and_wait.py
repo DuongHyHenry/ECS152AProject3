@@ -6,7 +6,7 @@ PACKET_SIZE = 1024
 #bytes reserved for sequence id
 SEQ_ID_SIZE = 4
 #bytes available for message
-MESSAGE_SIZE - PACKET_SIZE - SEQ_ID_SIZE
+MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
 #total packets to send
 WINDOW_SIZE = 1
 
