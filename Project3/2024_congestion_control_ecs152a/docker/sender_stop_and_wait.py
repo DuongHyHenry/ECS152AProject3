@@ -1,12 +1,15 @@
 import socket
-from datetime import datetime
 import time
 
 # Constants
+# total packet size
 PACKET_SIZE = 1024
+# bytes reserved for sequence id
 SEQ_ID_SIZE = 4
+# bytes available for message
 MESSAGE_SIZE = PACKET_SIZE - SEQ_ID_SIZE
-WINDOW_SIZE = 1
+# total packets to send
+#WINDOW_SIZE = 1
 
 def main():
 
@@ -33,22 +36,21 @@ def main():
     
         while seq_id < len(data):
             # Create messages
-            messages = []
-            acks = {}
+            #messages = []
+            #acks = {}
             seq_id_tmp = seq_id
-    
-            for i in range(WINDOW_SIZE):
-                # Construct messages
-                message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
-                messages.append((seq_id_tmp, message))
-                acks[seq_id_tmp] = False
-                seq_id_tmp += MESSAGE_SIZE
+
+            # Construct messages
+            message = int.to_bytes(seq_id_tmp, SEQ_ID_SIZE, byteorder='big', signed=True) + data[seq_id_tmp: seq_id_tmp + MESSAGE_SIZE]
+            #messages.append((seq_id_tmp, message))
+            #acks[seq_id_tmp] = False
+            acks = False
+            seq_id_tmp += MESSAGE_SIZE
     
             # Send messages and track send times
             send_times = {}  # To track when each message is sent
-            for sid, message in messages:
-                udp_socket.sendto(message, ('localhost', 5001))
-                send_times[sid] = time.time()  # Log send time
+            udp_socket.sendto(message, ('localhost', 5001))
+            send_times[sid] = time.time()  # Log send time
     
             # Wait for acknowledgment
             while True:
@@ -58,9 +60,10 @@ def main():
                     print(ack_id, ack[SEQ_ID_SIZE:])  # Preserve the print statement for each acknowledgment
     
                     # Mark all sequence IDs up to the ack_id as acknowledged
-                    for sid in list(acks.keys()):
-                        if sid <= ack_id:
-                            acks[sid] = True
+                    #for sid in list(acks.keys()):
+                        #if sid <= ack_id:
+                            #acks[sid] = True
+                    acks = True
     
                     # Measure delay for this packet
                     if ack_id in send_times:
@@ -73,14 +76,13 @@ def main():
                             jitter_values.append(jitter)
     
                     # All acks received, move on
-                    if all(acks.values()):
+                    if acks:
                         break
                 except socket.timeout:
                     # Resend unacknowledged messages
-                    for sid, message in messages:
-                        if not acks[sid]:
-                            udp_socket.sendto(message, ('localhost', 5001))
-                            send_times[sid] = time.time()  # Update resend time
+                    if not acks:
+                        udp_socket.sendto(message, ('localhost', 5001))
+                        send_times[sid] = time.time()  # Update resend time
     
             # Update the sequence ID and total bytes sent
             seq_id += MESSAGE_SIZE * WINDOW_SIZE
