@@ -28,7 +28,7 @@ def main():
     
         # Bind the socket to an OS port
         udp_socket.bind(("0.0.0.0", 5002))
-        udp_socket.settimeout(2)
+        udp_socket.settimeout(1)
     
         # Start sending data from the 0th sequence
         seq_id = 0
@@ -71,9 +71,9 @@ def main():
                     packet_delays.append(delay)
     
                         # Calculate jitter (difference from the previous delay)
-                        if len(packet_delays) > 1:
-                            jitter = abs(packet_delays[-1] - packet_delays[-2])
-                            jitter_values.append(jitter)
+                    if len(packet_delays) > 1:
+                        jitter = abs(packet_delays[-1] - packet_delays[-2])
+                        jitter_values.append(jitter)
     
                     # All acks received, move on
                     if acks:
