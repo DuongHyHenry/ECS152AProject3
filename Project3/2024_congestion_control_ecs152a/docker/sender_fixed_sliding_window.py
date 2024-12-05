@@ -95,8 +95,3 @@ print(f"Throughput: {throughput:.7f} bytes/second")
 print(f"Average Packet Delay: {average_delay:.7f} seconds")
 print(f"Average Jitter: {average_jitter:.7f} seconds")
 print(f"Performance Metric: {performance_metric:.7f}")
-
-#Implement your own sender code and bind it to any port other than 5001. Invoke your sender to send packets to localhost, port 5001 to communicate with the receiver.
-#Finally, on sending all the data, sender should send an empty message with the correct sequence id.
-#Receiver will then send an ack and fin message for the sender to know it's been acknowledged. (Lines 55 to 59 in receiver.py)
-#The sender should then send a message with body '==FINACK' to let the receiver know to exit (see line 31 and 32 in receiver.py)
